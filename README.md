@@ -1,5 +1,5 @@
 # HDDPG + HER + RND
-This repository contains the code to implement the *Hierarchical Deep Deterministic Policy Gradient (HDDPG) & Hindsight Experience Replay(HER) & Random Network Distillation(RND)* algorithm. Our experiment environment is Mocojo Robot environment, including *Reach、Push、PickandPlace、Slide*. However, We only came over the Reach task till now.
+This repository contains the code to implement the *Hierarchical Deep Deterministic Policy Gradient (HDDPG) & Hindsight Experience Replay(HER) & Random Network Distillation(RND)* algorithm. Our experiment environment is Mocojo Robot environment, including *Reach、Push、PickandPlace、Slide*. However, We only finished the Reach task till now.
 
 To run the codes, you can first execute the command *"python run_HAC.py --layers 1 --her --normalize  --retrain  --env reach  --episodes 5000 --threadings 1"*. The meaning of the flag is easy to understand, and you can read the option.py file to see all the flags. There is a "performance.jpg" showing the accuracy of training only if the threadings is 1.
 
