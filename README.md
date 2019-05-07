@@ -5,7 +5,7 @@ To run the codes, you can first execute the command *"python run_HAC.py --layers
 
 Our RND is an off-policy implement as most of the popular Curiosity Driven methods are on-policy recently, so we need to compute the intrinsic reward every batch sampled from the replay buffer because it changes when training.
 
-More details will be added later. If you have any questions, please email me at yang-r15@mails.tsinghua.edu.cn .
+More details will be added later.
 
 Thanks to the author of HAC, HER and RND. 
 
