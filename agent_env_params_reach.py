@@ -70,7 +70,11 @@ def design_agent_and_env(FLAGS):
 
     # Define number of episodes of transitions to be stored by each level of the hierarchy
     agent_params["episodes_to_store"] = 1000
-    agent_params["update_times"] = 40    #40
-    agent_params["batch_size"] = 12     # 12   用rnd时batchsize要大
+    if FLAGS.rnd:
+        agent_params["update_times"] = 1    # 2
+        agent_params["batch_size"] = 512
+    else:
+        agent_params["update_times"] = 40    #40
+        agent_params["batch_size"] = 12     # 32   用rnd时batchsize要大
 
     return agent_params, env_params

@@ -21,22 +21,23 @@ def create_nn(input, input_num, output_num, init_val=0.001, relu=True, trainable
 
 
 class RND:
-    def __init__(self, s_features, out_features=3, learning_rate=0.001):
+    def __init__(self, s_features, out_features=3, name="", learning_rate=0.001):
         self.s_features = s_features
         self.out_features = out_features
         self.lr = learning_rate
+        self.name = name
         self._build_net()
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
 
     def _build_net(self):    # 创建两个random网络，一个训练一个固定
-        self.state = tf.placeholder(tf.float32, [None, self.s_features], name='state')  # input
+        self.state = tf.placeholder(tf.float32, [None, self.s_features], name=self.name + 'state')  # input
 
-        with tf.variable_scope('train_net'):
+        with tf.variable_scope(self.name + 'train_net'):
             l1 = create_nn(self.state, self.s_features, 64, relu=True, trainable=True, name='l1')
             self.train_net_output = create_nn(l1, 64, self.out_features,relu=False, trainable=True, name='output')
 
-        with tf.variable_scope('target_net'):
+        with tf.variable_scope(self.name + 'target_net'):
             l1_ = create_nn(self.state, self.s_features, 64, init_val=10, relu=True, trainable=False, name='l1')
             self.target_net_output = create_nn(l1_, 64, self.out_features, init_val=10, relu=False, trainable=False, name='output')
 

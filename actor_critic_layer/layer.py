@@ -63,7 +63,7 @@ class Layer():
         self.normalize_state = None
         self.normalize_goal = None
         if self.FLAGS.rnd:
-            self.rnd_worker = RND(env.state_dim)
+            self.rnd_worker = RND(env.state_dim, name=str(self.layer_number))
             self.normalize_inreward = Normalizer(size=1)
 
 
@@ -142,7 +142,7 @@ class Layer():
     # Create action replay transition by evaluating hindsight action given original goal
     def perform_action_replay(self, hindsight_action, next_state, goal_status):           # 将一般的transition存下来
         if goal_status[self.layer_number]:
-            reward = 1     # 原本是0
+            reward = 0     # 原本是0
             finished = True
         else:
             reward = -1
@@ -341,9 +341,7 @@ class Layer():
                     self.penalize_subgoal(action, agent.current_state, goal_status[self.layer_number])
 
 
-            # Print summary of transition
             if agent.FLAGS.verbose:
-
                 print("\nEpisode %d, Training Layer %d, Attempt %d" % (episode_num, self.layer_number,attempts_made))
                 print("Old State: ", self.current_state)
                 print("Hindsight Action: ", hindsight_action)
@@ -359,6 +357,9 @@ class Layer():
 
             # Update state of current layer
             self.current_state = agent.current_state
+
+            if self.FLAGS.rnd:     # 对当前rnd进行训练
+                self.rnd_worker.train(self.current_state.reshape(1, env.state_dim))
 
             # Return to previous level to receive next subgoal if applicable
             if (max_lay_achieved is not None and max_lay_achieved >= self.layer_number) or agent.steps_taken >= env.max_actions or attempts_made >= self.time_limit:
@@ -401,7 +402,7 @@ class Layer():
                     for i in range(len(rewards)):
                         rewards[i] += 0.5 * normed_intrinsic_reward[i] / thre
 
-                    self.rnd_worker.train(old_states)
+                    # self.rnd_worker.train(old_states)
 
                 self.critic.update(old_states, actions, rewards, new_states, goals, self.actor.get_action(new_states,goals), is_terminals)
                 action_derivs = self.critic.get_gradients(old_states, goals, self.actor.get_action(old_states, goals))

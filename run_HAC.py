@@ -67,7 +67,7 @@ agent_params, env_params = design_function.design_agent_and_env(FLAGS)
 
 assert FLAGS.threadings >= 1, "Threadings should be more than 1!"
 if FLAGS.threadings == 1:
-    set_global_seed(time.time() + random.randint(0,10))
+    set_global_seed(time.time() + random.randint(0,100))
     env = Environment(env_params, FLAGS)
     agent = Agent(FLAGS, env, agent_params)
     run_HAC(FLAGS, env, agent, plot_figure=True)

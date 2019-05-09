@@ -55,20 +55,83 @@ from pylab import *
 # plt.show()
 
 def plot_data(path="performance_data.txt"):
+    data_list = []
     with open(path, "r") as file:
         lines = file.readlines()
         for line in lines:
             if line[0] in "0123456789":
                 num_list = [float(x) for x in line.split()]
-                plot(num_list)
-                plt.title("Performance")
-                plt.xlabel("Epoch")
-                plt.ylabel("Accuracy")
-                plt.savefig(path.replace(".txt", ".jpg"))
+                data_list.append(num_list)
+                # plot(num_list)
+                # plt.title("Performance")
+                # plt.xlabel("Epoch")
+                # plt.ylabel("Accuracy")
+                # plt.savefig(path.replace(".txt", ".jpg"))
 
             else:
                 continue
+    data_list_2 = [[] for _ in range(len(data_list[0]))]
+    for i in range(len(data_list[0])):
+        for j in range(len(data_list)):
+            data_list_2[i].append(data_list[j][i])
+    data_mean = [mean(x) for x in data_list_2]
+    data_std = [sqrt(var(x)) for x in data_list_2]
+    print(data_mean)
+    print(data_std)
+    x = range(len(data_list[0]))
+    plot(x, data_mean)
+    plt.fill_between(x, np.array(data_mean) - np.array(data_std), np.array(data_mean) + np.array(data_std), alpha=0.3)
+    plt.title("Performance")
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy")
+    plt.savefig(path.replace(".txt", "_mean.jpg"))
+
+
+def plot_list(path_list, label_list):
+    for i, path in enumerate(path_list):
+        data_list = []
+        with open(path, "r") as file:
+            lines = file.readlines()
+            for line in lines:
+                if line[0] in "0123456789":
+                    num_list = [float(x) for x in line.split()]
+                    data_list.append(num_list)
+                    # plot(num_list)
+                    # plt.title("Performance")
+                    # plt.xlabel("Epoch")
+                    # plt.ylabel("Accuracy")
+                    # plt.savefig(path.replace(".txt", ".jpg"))
+
+                else:
+                    continue
+        data_list_2 = [[] for _ in range(len(data_list[0]))]
+        for k in range(len(data_list[0])):
+            for j in range(len(data_list)):
+                data_list_2[k].append(data_list[j][k])
+
+        data_mean = [mean(x) for x in data_list_2]
+        data_std = [sqrt(var(x)) for x in data_list_2]
+        print(data_mean)
+        print(data_std)
+        x = range(len(data_list[0]))
+        plot(x, data_mean, label=label_list[i])
+        plt.fill_between(x, np.array(data_mean) - np.array(data_std), np.array(data_mean) + np.array(data_std),
+                         alpha=0.3)
+    plt.title("Performance")
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy")
+    plt.legend()
+    plt.savefig("compare.jpg")
+
+
 
 
 if __name__=="__main__":
-    plot_data()
+    # path = "/Users/a/Desktop/毕设/reach环境数据/HDDPG2/50000episodes/performance_data.txt"
+    # plot_data(path)
+
+    path_list = ["/Users/a/Desktop/毕设/reach环境数据/DDPG+RND/performance_data_rnd_r0.txt","/Users/a/Desktop/毕设/reach环境数据/DDPG+RND/performance_data_rnd_r1.txt"]
+    label_list = ["reward 0","reward 1"]
+    plot_list(path_list, label_list)
+
+    # plot_data()
