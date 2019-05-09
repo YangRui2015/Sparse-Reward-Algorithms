@@ -1,27 +1,23 @@
-# Hierarchical Actor-Critc (HAC)
-This repository contains the code to implement the *Hierarchical Actor-Critic (HAC)* algorithm.  HAC helps agents learn tasks more quickly by enabling them to break problems down into short sequences of actions.  The paper describing the algorithm is available [here](https://openreview.net/pdf?id=ryzECoAcY7).
+# HDDPG + HER + RND
+This repository contains the code to implement the *Hierarchical Deep Deterministic Policy Gradient (HDDPG) & Hindsight Experience Replay(HER) & Random Network Distillation(RND)* algorithm. Our experiment environment is Mocojo Robot environment, including *Reach、Push、PickandPlace、Slide*. However, We only finished the Reach task till now.
 
-To run HAC, execute the command *"python3 initialize_HAC.py --retrain"*.  By default, this will train a UR5 agent with a 3-level hierarchy to learn to achieve certain poses.  This UR5 agent should achieve a 90+% success rate in around 350 episodes.  The following [video](https://www.youtube.com/watch?v=R86Vs9Vb6Bc) shows how a 3-layered agent performed after 450 episodes of training.  In order to watch your trained agent, execute the command *"python3 initialize_HAC.py --test --show"*.  Please note that in order to run this repository, you must have (i) a MuJoCo [license](https://www.roboti.us/license.html), (ii) the required MuJoCo software [libraries](https://www.roboti.us/index.html), and (iii) the MuJoCo Python [wrapper](https://github.com/openai/mujoco-py) from OpenAI.  
+To run the codes, you can first execute the command *"python run_HAC.py --layers 1 --her --normalize  --retrain  --env reach  --episodes 5000 --threadings 1"*. The meaning of the flag is easy to understand, and you can read the option.py file to see all the flags. There is a "performance.jpg" showing the accuracy of training only if the threadings is 1.
 
-To run HAC with your own agents and MuJoCo environments, you need to complete the template in the *"design_agent_and_env.py"* file.  The *"example_designs"* folder contains other examples of design templates that build different agents in the UR5 reacher and inverted pendulum environments.
+Our RND is an off-policy implement as most of the popular Curiosity Driven methods are on-policy recently, so we need to compute the intrinsic reward every batch sampled from the replay buffer because it changes when training.
 
-Happy to answer any questions you have.  Please email me at andrew_levy2@brown.edu.
+More details will be added later.
 
-## UPDATE LOG
+Thanks to the author of HAC, HER and RND. 
 
-### 10/12/2018 - Key Changes
-1.  Bounded Q-Values
+## Version LOG
 
-The Q-values output by the critic network at each level are now bounded between *[-T,0]*, in which *T* is the max sequence length in which each policy specializes as well as the negative of the subgoal penalty.  We use an upper bound of 0 because our code uses a nonpositive reward function.  Consequently, Q-values should never be positive.  However, we noticed that somtimes the critic function approximator would make small mistakes and assign positive Q-values, which occassionally proved harmful to results.  In addition, we observed improved results when we used a tighter lower bound of *-T* (i.e., the subgoal penalty).  The improved results may result from the increased flexibility the bounded Q-values provides the critic.  The critic can assign a value of *-T* to any (state,action,goal) tuple, in which the action does not bring the agent close to the goal, instead of having to learn the exact value.
+### 2019/5/7 First Version
+1.  Hierachical DDPG and HER;
 
-2.  Removed Target Networks
+2.  Observation (State/Goal) Normalization;
 
-We also noticed improved results when we used the regular Q-networks to determine the Bellman target updates (i.e., *reward + Q(next state,pi(next state),goal)*) instead of the separate target networks that are used in DDPG.  The default setting of our code base thus no longer uses target networks.  However, the target networks can be easily activated by making the changes specified in (i) the *"learn"* method in the *"layer.py"* file and (ii) the *"update"* method in the *"critic.py"* file.  
+3.  RND;
 
-3.  Centralized Design Template
+4.  Mutilprocessing (so we can run many experiments in the same time);
 
-Users can now configure the agent and environment in the single file, *"design_agent_and_env.py"*.  This template file contains most of the significant hyperparameters in HAC.  We have removed the command-line options that can change the architecture of the agent's hierarchy.
-
-4.  Added UR5 Reacher Environment
-
-We have added a new UR5 reacher environment, in which a UR5 agent can learn to achieve various poses.  The *"ur5.xml"* MuJoCo file also contains commented code for a Robotiq gripper if you would like to augment the agent.  Additional environments will hopefully be added shortly.  
+5. Reach and Push environment;
