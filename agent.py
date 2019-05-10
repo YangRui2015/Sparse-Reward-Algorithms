@@ -35,8 +35,6 @@ class Agent():
 
         # Below hyperparameter specifies number of Q-value updates made after each episode， 每个episode后Q值更新次数？？
         self.num_updates = agent_params["update_times"]
-
-
         self.other_params = agent_params
 
 
@@ -58,22 +56,21 @@ class Agent():
             if i == self.FLAGS.layers - 1:
 
                 # Check dimensions are appropriate         
-                assert len(proj_end_goal) == len(self.goal_array[i]) == len(env.end_goal_thresholds), "Projected end goal, actual end goal, and end goal thresholds should have same dimensions"
+                assert len(proj_end_goal) == len(self.goal_array[i]), "Projected end goal, actual end goal, and end goal thresholds should have same dimensions"
 
                 # Check whether layer i's goal was achieved by checking whether projected state is within the goal achievement threshold
                 for j in range(len(proj_end_goal)):
-                    if np.absolute(self.goal_array[i][j] - proj_end_goal[j]) > env.end_goal_thresholds[j]:
+                    if np.absolute(self.goal_array[i][j] - proj_end_goal[j]) > env.end_goal_thresholds:
                         goal_achieved = False
                         break
 
             # If not highest layer, compare to subgoal thresholds
             else:
                 # Check that dimensions are appropriate
-                assert len(proj_subgoal) == len(self.goal_array[i]) == len(env.subgoal_thresholds), "Projected subgoal, actual subgoal, and subgoal thresholds should have same dimensions"           
+                assert len(proj_subgoal) == len(self.goal_array[i]), "Projected subgoal, actual subgoal, and subgoal thresholds should have same dimensions"
 
-                # Check whether layer i's goal was achieved by checking whether projected state is within the goal achievement threshold
                 for j in range(len(proj_subgoal)):
-                    if np.absolute(self.goal_array[i][j] - proj_subgoal[j]) > env.subgoal_thresholds[j]:
+                    if np.absolute(self.goal_array[i][j] - proj_subgoal[j]) > env.subgoal_thresholds:
                         goal_achieved = False
                         break
 
@@ -89,8 +86,6 @@ class Agent():
     def clear_buffer(self):
         for i in range(len(self.layers)):
             self.layers[i].replay_buffer.clear()
-
-
 
     def initialize_networks(self):
         model_vars = tf.trainable_variables()
@@ -120,14 +115,10 @@ class Agent():
         for i in range(len(self.layers)):     # 每个layer一次学习一个episode的次数是相同的，默认是40
             self.layers[i].learn(self.num_updates)
 
-       
-    # Train agent for an episode， train函数只持续一个episode, episode_num是episode的序号
     def train(self,env, episode_num):
 
         # Select initial state from in initial state space, defined in environment.py
         self.current_state = env.reset_sim()
-
-        # Select final goal from final goal space, defined in "design_agent_and_env.py" 得到每次更新的目标，先reset然后得到新目标
         self.goal_array[self.FLAGS.layers - 1] = env.goal
         print("Next End Goal: ", self.goal_array[self.FLAGS.layers - 1])
 
@@ -135,7 +126,7 @@ class Agent():
         self.steps_taken = 0
 
         # Train for an episode，似乎是执行/存储数据，而不是训练
-        goal_status, max_lay_achieved = self.layers[self.FLAGS.layers-1].train(self,env, episode_num=episode_num)
+        goal_status, max_lay_achieved = self.layers[self.FLAGS.layers-1].train(self, env, episode_num=episode_num)
 
         # Update actor/critic networks if not testing
         if not self.FLAGS.test:

@@ -31,7 +31,9 @@ class Actor():
         else:
             self.action_space_size = env.subgoal_dim
 
-        self.actor_name = 'actor_' + str(layer_number) + str(time.time())
+        self.actor_name = 'actor_' + str(layer_number)
+        if FLAGS.threadings > 1:
+            self.actor_name += str(time.time())
 
         # Dimensions of goal placeholder will differ depending on layer level
         if layer_number == FLAGS.layers - 1:

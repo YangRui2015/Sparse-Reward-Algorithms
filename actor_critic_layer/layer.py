@@ -16,7 +16,6 @@ class Layer():
             self.time_limit = FLAGS.time_scale      # time_limit是当前层的最大步数
         else:
             self.time_limit = env.max_actions
-        # self.time_limit = FLAGS.time_scale
 
         self.current_state = None
         self.goal = None
@@ -71,21 +70,21 @@ class Layer():
     # Add noise to provided action
     def add_noise(self,action, env):
         # Noise added will be percentage of range
-        if self.layer_number == 0:
-            action_bounds = env.action_bounds
-            action_offset = env.action_offset
-        else:
-            action_bounds = env.subgoal_bounds_symmetric
-            action_offset = env.subgoal_bounds_offset
-
-        assert len(action) == len(action_bounds), "Action bounds must have same dimension as action"
-        assert len(action) == len(self.noise_perc), "Noise percentage vector must have same dimension as action"
+        # if self.layer_number == 0:
+        #     action_bounds = env.action_bounds
+        #     action_offset = env.action_offset
+        # else:
+        #     action_bounds = env.subgoal_bounds_symmetric
+        #     action_offset = env.subgoal_bounds_offset
 
         # Add noise to action and ensure remains within bounds
         for i in range(len(action)):
-            action[i] += np.random.normal(0,self.noise_perc[i] * action_bounds[i])
-
-            action[i] = max(min(action[i], action_bounds[i]+action_offset[i]), -action_bounds[i]+action_offset[i])
+            if self.layer_number == 0:
+                action[i] += np.random.normal(0, self.noise_perc * env.action_bounds)
+                action[i] = max(min(action[i], env.action_bounds + env.action_offset), -env.action_bounds + env.action_offset)
+            else:
+                action[i] += np.random.normal(0, self.noise_perc * env.subgoal_bounds_symmetric[i])
+                action[i] = max(min(action[i], env.subgoal_bounds_symmetric[i] + env.subgoal_bounds_offset[i]), -env.subgoal_bounds_symmetric[i] + env.subgoal_bounds_offset[i])
 
         return action
 
@@ -101,7 +100,7 @@ class Layer():
         # Each dimension of random action should take some value in the dimension's range
         for i in range(len(action)):
             if self.layer_number == 0:
-                action[i] = np.random.uniform(-env.action_bounds[i] + env.action_offset[i], env.action_bounds[i] + env.action_offset[i])
+                action[i] = np.random.uniform(-env.action_bounds + env.action_offset, env.action_bounds + env.action_offset)
             else:
                 action[i] = np.random.uniform(env.subgoal_bounds_symmetric[i] - env.subgoal_bounds_offset[i],env.subgoal_bounds_symmetric[i] + env.subgoal_bounds_offset[i])
 
@@ -142,7 +141,7 @@ class Layer():
     # Create action replay transition by evaluating hindsight action given original goal
     def perform_action_replay(self, hindsight_action, next_state, goal_status):           # 将一般的transition存下来
         if goal_status[self.layer_number]:
-            reward = 0     # 原本是0
+            reward = 1     # 原本是0
             finished = True
         else:
             reward = -1
@@ -179,11 +178,11 @@ class Layer():
 
     # Return reward given provided goal and goal achieved in hindsight
     def get_reward(self,new_goal, hindsight_goal, goal_thresholds):
-        assert len(new_goal) == len(hindsight_goal) == len(goal_thresholds), "Goal, hindsight goal, and goal thresholds do not have same dimensions"
+        assert len(new_goal) == len(hindsight_goal), "Goal, hindsight goal, and goal thresholds do not have same dimensions"
 
         # If the difference in any dimension is greater than threshold, goal not achieved
         for i in range(len(new_goal)):
-            if np.absolute(new_goal[i]-hindsight_goal[i]) > goal_thresholds[i]:
+            if np.absolute(new_goal[i]-hindsight_goal[i]) > goal_thresholds:
                 return -1
 
         # Else goal is achieved

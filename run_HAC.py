@@ -3,7 +3,7 @@ from global_utils import print_summary
 from options import parse_options
 from global_utils import set_global_seed, save_performance, plot_data
 import time
-from importlib import import_module
+from agent_env_params import design_agent_and_env
 from multiprocessing import Process
 import random
 
@@ -41,7 +41,7 @@ def run_HAC(FLAGS,env,agent, plot_figure=False, num=0):
                 successful_episodes += 1
 
         # Save agent
-        if epoch % SAVE_FREQ == 0 and not FLAGS.test:
+        if epoch % SAVE_FREQ == 0 and not FLAGS.test and FLAGS.threadings == 1:
             agent.save_model(epoch * num_episodes)
 
         success_rate = successful_episodes / num_episodes * 100
@@ -54,20 +54,22 @@ def run_HAC(FLAGS,env,agent, plot_figure=False, num=0):
 
 
 def worker(agent_params, env_params, FLAGS, i):
-    set_global_seed(time.time())
+    seed = int(time.time()) + random.randint(0, 100)
+    set_global_seed(seed)
+    FLAGS.seed = seed
     env = Environment(env_params, FLAGS)
-    agent = Agent(FLAGS, env, agent_params, i)
+    agent = Agent(FLAGS, env, agent_params)
     run_HAC(FLAGS, env, agent, plot_figure=False, num=i)
 
 
 FLAGS = parse_options()
-# set_global_seed(FLAGS.seed)
-design_function = import_module("agent_env_params_" + FLAGS.env)
-agent_params, env_params = design_function.design_agent_and_env(FLAGS)
+agent_params, env_params = design_agent_and_env(FLAGS)
 
 assert FLAGS.threadings >= 1, "Threadings should be more than 1!"
 if FLAGS.threadings == 1:
-    set_global_seed(time.time() + random.randint(0,100))
+    seed = int(time.time()) + random.randint(0,100)
+    set_global_seed(seed)
+    FLAGS.seed = seed
     env = Environment(env_params, FLAGS)
     agent = Agent(FLAGS, env, agent_params)
     run_HAC(FLAGS, env, agent, plot_figure=True)

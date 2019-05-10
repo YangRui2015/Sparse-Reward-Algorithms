@@ -17,7 +17,7 @@ def print_summary(FLAGS,env):
 
     print("\n- - - - - - - - - - -")
     print("Task Summary: ","\n")
-    print("Environment: ", env.model_path)
+    print("Environment: ", env.env)
     print("Total Episodes:", FLAGS.episodes)
     print("Hindsight Experiment Replay: ", FLAGS.her)
     print("Number of Layers: ", FLAGS.layers)

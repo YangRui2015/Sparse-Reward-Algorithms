@@ -7,7 +7,9 @@ class Critic():
 
     def __init__(self, sess, env, layer_number, FLAGS, learning_rate=0.001, gamma=0.98, tau=0.05):
         self.sess = sess
-        self.critic_name = 'critic_' + str(layer_number) + str(time.time())
+        self.critic_name = 'critic_' + str(layer_number)
+        if FLAGS.threadings > 1:
+            self.critic_name += str(time.time())
         self.learning_rate = learning_rate
         self.gamma = gamma
         self.tau = tau
