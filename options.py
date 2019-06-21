@@ -44,7 +44,7 @@ def parse_options():
         "--save_freq",
         type=int,
         help="How often to save model",
-        default=100,
+        default=50,
     )
 
     parser.add_argument(

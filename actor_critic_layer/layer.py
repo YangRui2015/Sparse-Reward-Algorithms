@@ -27,7 +27,7 @@ class Layer():
         self.episodes_to_store = agent_params["episodes_to_store"]
 
         # Set number of transitions to serve as replay goals during goal replay，从future中选的作为goal的数量
-        self.num_replay_goals = 3
+        self.num_replay_goals = 4
 
         # Number of the transitions created for each attempt (i.e, action replay + goal replay + subgoal testing)
         if self.layer_number == 0:
@@ -51,7 +51,7 @@ class Layer():
         self.critic = Critic(sess, env, self.layer_number, FLAGS)
 
         # Parameter determines degree of noise added to actions during training
-        # self.noise_perc = noise_perc
+        self.epsilon = agent_params["epsilon"]
         if self.layer_number == 0:
             self.noise_perc = agent_params["atomic_noise"]
         else:
@@ -108,7 +108,7 @@ class Layer():
 
 
     # Function selects action using an epsilon-greedy policy
-    def choose_action(self,agent, env, subgoal_test, epsilon=0.2):
+    def choose_action(self,agent, env, subgoal_test):
         # If testing mode or testing subgoals, action is output of actor network without noise, test/subgoal_test不加噪声
         if agent.FLAGS.test or subgoal_test:
             if self.FLAGS.normalize and (self.normalize_state is not None) and (self.normalize_goal is not None):
@@ -117,7 +117,7 @@ class Layer():
 
         else:
 
-            if np.random.random_sample() > epsilon:
+            if np.random.random_sample() > self.epsilon:
                 if self.FLAGS.normalize and (self.normalize_goal is not None) and (self.normalize_state is not None):
                     action = self.actor.get_action(np.reshape(self.normalize_state,(1,len(self.current_state))), np.reshape(self.normalize_goal,(1,len(self.goal))))[0]
                 else:
@@ -393,15 +393,14 @@ class Layer():
                 old_states, actions, rewards, new_states, goals, is_terminals = self.replay_buffer.get_batch()
 
                 if self.FLAGS.rnd:
-                    self.normalize_inreward.reset()
-                    intrinsic_reward = self.rnd_worker.get_intrinsic_reward(old_states).reshape(len(old_states), 1)
-                    self.normalize_inreward.update(np.vstack(intrinsic_reward))
-                    normed_intrinsic_reward = self.normalize_inreward.normalize(intrinsic_reward)
-                    thre = max(np.abs(normed_intrinsic_reward))
+                    # self.normalize_inreward.reset()
+                    intrinsic_reward = self.rnd_worker.get_intrinsic_reward(new_states).reshape(len(new_states), 1)
+                    # self.normalize_inreward.update(np.vstack(intrinsic_reward))
+                    # normed_intrinsic_reward = self.normalize_inreward.normalize(intrinsic_reward)   # 不用normalize reward效果可能会好一些
+                    thre = max(np.abs(intrinsic_reward))
                     for i in range(len(rewards)):
-                        rewards[i] += 0.5 * normed_intrinsic_reward[i] / thre
+                        rewards[i] += 0.5 * intrinsic_reward[i] / thre
 
-                    # self.rnd_worker.train(old_states)
 
                 self.critic.update(old_states, actions, rewards, new_states, goals, self.actor.get_action(new_states,goals), is_terminals)
                 action_derivs = self.critic.get_gradients(old_states, goals, self.actor.get_action(old_states, goals))

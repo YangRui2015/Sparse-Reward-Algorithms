@@ -32,7 +32,7 @@ def design_agent_and_env(FLAGS):
     env_params["max_actions"] = FLAGS.total_steps  # 一个episode的最大步数（动作数）
 
     if FLAGS.env == "handreach":
-        distance_threshold = 0.02
+        distance_threshold = 0.01
     else:
         distance_threshold = 0.05   # 5cm
     env_params["end_goal_thresholds"] = distance_threshold
@@ -46,14 +46,15 @@ def design_agent_and_env(FLAGS):
     agent_params["subgoal_penalty"] = -FLAGS.time_scale     # 子目标未实现的惩罚
     agent_params["atomic_noise"] = 0.1
     agent_params["subgoal_noise"] = 0.03
+    agent_params["epsilon"] = 0.1          # choose random action
 
     # Define number of episodes of transitions to be stored by each level of the hierarchy
     agent_params["episodes_to_store"] = 1000
     if FLAGS.rnd:
-        agent_params["update_times"] = 2    # 2
+        agent_params["update_times"] = 4    # 2
         agent_params["batch_size"] = 512
     else:
         agent_params["update_times"] = 40    #40
-        agent_params["batch_size"] = 32     # 32   12
+        agent_params["batch_size"] = 64     # 32   12
 
     return agent_params, env_params

@@ -36,8 +36,8 @@ class Environment():
         self.subgoal_thresholds = env_params["subgoal_thresholds"]
 
         if FLAGS.env == "handreach":
-            self.subgoal_bounds_symmetric = self.env.env.initial_goal
-            self.subgoal_bounds_offset = np.array([0.05 for _ in range(self.subgoal_dim)])
+            self.subgoal_bounds_symmetric = np.array([0.5 for _ in range(self.subgoal_dim)])
+            self.subgoal_bounds_offset = np.array([0.5 for _ in range(self.subgoal_dim)])
 
         else:
             self.subgoal_bounds_symmetric = self.env.env.initial_gripper_xpos
