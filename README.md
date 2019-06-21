@@ -21,3 +21,8 @@ Thanks to the author of HAC, HER and RND.
 4.  Mutilprocessing (so we can run many experiments in the same time);
 
 5. Reach and Push environment;
+
+### 2019/5/10 Update
+1. Use gym to create environment class(so it is easy to use other environment);
+
+2. Hand Reach environment;
