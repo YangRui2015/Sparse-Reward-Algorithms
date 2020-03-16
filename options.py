@@ -1,28 +1,5 @@
 import argparse
 
-"""
-Below are training options user can specify in command line.
-
-Options Include:
-
-1. Retrain boolean
-- If included, actor and critic neural network parameters are reset
-
-2. Testing boolean
-- If included, agent only uses greedy policy without noise.  No changes are made to policy and neural networks. 
-- If not included, periods of training are by default interleaved with periods of testing to evaluate progress.
-
-3. Show boolean
-- If included, training will be visualized
-
-4. Train Only boolean
-- If included, agent will be solely in training mode and will not interleave periods of training and testing
-
-5. Verbosity boolean
-- If included, summary of each transition will be printed
-"""
-
-
 def parse_options():
     parser = argparse.ArgumentParser()
 
@@ -44,14 +21,20 @@ def parse_options():
         "--save_freq",
         type=int,
         help="How often to save model",
-        default=50,
+        default=10,
+    )
+
+    parser.add_argument(
+        '--save_experience',
+        action='store_true',
+        help='if save experience for imitatation learning'
     )
 
     parser.add_argument(
         "--layers",
         type=int,
         help="How many layer of the HRL",
-        default=2,
+        default=1,
     )
 
     parser.add_argument(
@@ -61,17 +44,17 @@ def parse_options():
     )
 
     parser.add_argument(
-        '--rnd',
+        '--imitation',
         action='store_true',
-        help='if use rnd or not',
+        help='if use imitation learning'
     )
 
-    # parser.add_argument(
-    #     '--seed',
-    #     type=int,
-    #     help="random seed",
-    #     default=5
-    # )
+    parser.add_argument(
+        '--imit_ratio',
+        type=float,
+        default=1.0,
+        help='ratio of imitation loss by actor loss'
+    )
 
     parser.add_argument(
         '--retrain',
@@ -110,17 +93,36 @@ def parse_options():
         help='The environment to run'
     )
 
+    parser.add_argument(
+        '--rtype',
+        type=str,
+        default="sparse",
+        help='sparse reward or dense reward'
+    )
+
+    parser.add_argument(
+        '--curriculum',
+        type=int,
+        default=0,
+        help='num of curriculums'
+    )
+
+    parser.add_argument(
+        '--curiosity',
+        action='store_true',
+        help='use curiosity driven method'
+    )
+
     FLAGS, unparsed = parser.parse_known_args()
 
-    if FLAGS.threadings > 1:
+    if FLAGS.threadings > 1:  # otherwise there will be a bug
         FLAGS.show = False
 
-    if FLAGS.rnd:
-        FLAGS.normalize = True
+    if FLAGS.test:
+        FLAGS.retrain = False
 
+    print("You can check your parameters here. Press 'c' to continue.")
     print(FLAGS)
-    import pdb
-    pdb.set_trace()
 
-
+    import pdb; pdb.set_trace()
     return FLAGS

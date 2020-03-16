@@ -3,7 +3,7 @@ from .experience_buffer import ExperienceBuffer
 from .actor import Actor
 from .critic import Critic
 from .normalize import Normalizer
-from .RND import RND
+from .Curiosity import ForwardDynamics
 
 class Layer():
     def __init__(self, layer_number, FLAGS, env, sess, agent_params):
@@ -11,46 +11,36 @@ class Layer():
         self.FLAGS = FLAGS
         self.sess = sess
 
-        # 只有一层的时候limit直接为最大步数
+        # time limit = max action if len(layers) = 1
         if FLAGS.layers > 1:
-            self.time_limit = FLAGS.time_scale      # time_limit是当前层的最大步数
+            self.time_limit = FLAGS.time_scale      
         else:
             self.time_limit = env.max_actions
 
         self.current_state = None
         self.goal = None
-
-        # Ceiling on buffer size
-        self.buffer_size_ceiling = 10**7
-
-        # Number of full episodes stored in replay buffer
+        self.buffer_size_ceiling = 10**6
         self.episodes_to_store = agent_params["episodes_to_store"]
-
-        # Set number of transitions to serve as replay goals during goal replay，从future中选的作为goal的数量
         self.num_replay_goals = 4
 
-        # Number of the transitions created for each attempt (i.e, action replay + goal replay + subgoal testing)
+        # Number of the transitions created 
         if self.layer_number == 0:
             self.trans_per_attempt = (1 + self.num_replay_goals) * self.time_limit
         else:
             self.trans_per_attempt = (1 + self.num_replay_goals) * self.time_limit + int(self.time_limit/3)
 
-        # Buffer size = transitions per attempt * # attempts per episode * num of episodes stored
+        # Buffer size 
         self.buffer_size = min(self.trans_per_attempt * self.time_limit**(self.FLAGS.layers-1 - self.layer_number) * self.episodes_to_store, self.buffer_size_ceiling)
-
-        # self.buffer_size = 1000000
         self.batch_size = agent_params["batch_size"]    # 太大了，以至于没有学习 1024,12
-
         self.replay_buffer = ExperienceBuffer(self.buffer_size, self.batch_size, FLAGS.normalize)
+        
+        # imitation buffer
+        if FLAGS.imitation:
+            self.imitation_buffer = ExperienceBuffer(self.buffer_size, agent_params['imit_batch_size'], FLAGS.normalize)
 
-        # Create buffer to store not yet finalized goal replay transitions
         self.temp_goal_replay_storage = []
-
-        # Initialize actor and critic networks
-        self.actor = Actor(sess, env, self.batch_size, self.layer_number, FLAGS)
+        self.actor = Actor(sess, env, self.batch_size, self.layer_number, FLAGS, imit_batch_size=agent_params['imit_batch_size'],imit_ratio=agent_params['imit_ratio'])
         self.critic = Critic(sess, env, self.layer_number, FLAGS)
-
-        # Parameter determines degree of noise added to actions during training
         self.epsilon = agent_params["epsilon"]
         if self.layer_number == 0:
             self.noise_perc = agent_params["atomic_noise"]
@@ -61,23 +51,12 @@ class Layer():
         self.subgoal_penalty = agent_params["subgoal_penalty"]
         self.normalize_state = None
         self.normalize_goal = None
-        if self.FLAGS.rnd:
-            self.rnd_worker = RND(env.state_dim, name=str(self.layer_number))
-            self.normalize_inreward = Normalizer(size=1)
+        if self.FLAGS.curiosity:
+            self.cur_model = ForwardDynamics(env.state_dim, env.action_dim, name=str(self.layer_number))
+        self.normalize_inreward = Normalizer(size=1)
 
-
-
-    # Add noise to provided action
+    # Add noise to actions
     def add_noise(self,action, env):
-        # Noise added will be percentage of range
-        # if self.layer_number == 0:
-        #     action_bounds = env.action_bounds
-        #     action_offset = env.action_offset
-        # else:
-        #     action_bounds = env.subgoal_bounds_symmetric
-        #     action_offset = env.subgoal_bounds_offset
-
-        # Add noise to action and ensure remains within bounds
         for i in range(len(action)):
             if self.layer_number == 0:
                 action[i] += np.random.normal(0, self.noise_perc * env.action_bounds)
@@ -85,38 +64,31 @@ class Layer():
             else:
                 action[i] += np.random.normal(0, self.noise_perc * env.subgoal_bounds_symmetric[i])
                 action[i] = max(min(action[i], env.subgoal_bounds_symmetric[i] + env.subgoal_bounds_offset[i]), -env.subgoal_bounds_symmetric[i] + env.subgoal_bounds_offset[i])
-
         return action
 
-
-    # Select random action
+    # randomly select action
     def get_random_action(self, env):
-
         if self.layer_number == 0:
             action = np.zeros((env.action_dim))
         else:
             action = np.zeros((env.subgoal_dim))
 
-        # Each dimension of random action should take some value in the dimension's range
         for i in range(len(action)):
             if self.layer_number == 0:
                 action[i] = np.random.uniform(-env.action_bounds + env.action_offset, env.action_bounds + env.action_offset)
             else:
                 action[i] = np.random.uniform(env.subgoal_bounds_symmetric[i] - env.subgoal_bounds_offset[i],env.subgoal_bounds_symmetric[i] + env.subgoal_bounds_offset[i])
-
         return action
 
 
-    # Function selects action using an epsilon-greedy policy
-    def choose_action(self,agent, env, subgoal_test):
-        # If testing mode or testing subgoals, action is output of actor network without noise, test/subgoal_test不加噪声
-        if agent.FLAGS.test or subgoal_test:
+    # select action using an epsilon-greedy policy
+    def choose_action(self,agent, env,test, subgoal_test):
+        # If testing, no noise
+        if test or subgoal_test:
             if self.FLAGS.normalize and (self.normalize_state is not None) and (self.normalize_goal is not None):
                 return self.actor.get_action(np.reshape(self.normalize_state,(1,len(self.current_state))), np.reshape(self.normalize_goal,(1,len(self.goal))))[0], "Policy", subgoal_test
             return self.actor.get_action(np.reshape(self.current_state,(1,len(self.current_state))), np.reshape(self.goal,(1,len(self.goal))))[0], "Policy", subgoal_test
-
         else:
-
             if np.random.random_sample() > self.epsilon:
                 if self.FLAGS.normalize and (self.normalize_goal is not None) and (self.normalize_state is not None):
                     action = self.actor.get_action(np.reshape(self.normalize_state,(1,len(self.current_state))), np.reshape(self.normalize_goal,(1,len(self.goal))))[0]
@@ -124,7 +96,6 @@ class Layer():
                     action = self.actor.get_action(np.reshape(self.current_state,(1,len(self.current_state))), np.reshape(self.goal,(1,len(self.goal))))[0]
                 action = self.add_noise(action, env)
                 action_type = "Noisy Policy"
-
             else:
                 action = self.get_random_action(env)
                 action_type = "Random"
@@ -134,119 +105,93 @@ class Layer():
                 next_subgoal_test = True
             else:
                 next_subgoal_test = False
-
             return action, action_type, next_subgoal_test
 
 
-    # Create action replay transition by evaluating hindsight action given original goal
-    def perform_action_replay(self, hindsight_action, next_state, goal_status):           # 将一般的transition存下来
+    def get_project_goal(self, state, env, total_layers):
+        if self.layer_number == 0:                                  
+            hindsight_goal = env.project_state_to_end_goal(state)
+        else:
+            hindsight_goal = env.project_state_to_subgoal(state)
+        return hindsight_goal
+
+    # add data to replay buffer
+    def perform_action_replay(self, hindsight_action, next_state, goal_status, env, rtype='sparse'):           
         if goal_status[self.layer_number]:
-            reward = 1     # 原本是0
+            reward = 1
             finished = True
         else:
             reward = -1
             finished = False
+        # reward shaping, only use shaping rewards
+        if rtype == 'dense':
+            hindsight_goal0 = self.get_project_goal(self.current_state, env, len(goal_status))
+            hindsight_goal1 = self.get_project_goal(next_state, env, len(goal_status))
+            reward0 = self.get_reward(self.goal, hindsight_goal0, rtype=rtype)
+            reward1 = self.get_reward(self.goal, hindsight_goal1, rtype=rtype)
+            reward = (reward1 - reward0) * 1000
 
-        # print("reward: {}".format(reward))
-
-        # Transition will take the form [old state, hindsight_action, reward, next_state, goal, terminate boolean, None]
         transition = [self.current_state, hindsight_action, reward, next_state, self.goal, finished, None]
-
         self.replay_buffer.add(np.copy(transition))
 
 
-    # Create initial goal replay transitions
+    # Create transitions for HER
     def create_prelim_goal_replay_trans(self, hindsight_action, next_state, env, total_layers):
-
-        if self.layer_number == total_layers - 1:                                  # 最高层
-            hindsight_goal = env.project_state_to_end_goal(next_state)
-        else:
-            hindsight_goal = env.project_state_to_subgoal(next_state)
-
+        hindsight_goal = self.get_project_goal(next_state, env, total_layers)
         transition = [self.current_state, hindsight_action, None, next_state, None, None, hindsight_goal]
-
         self.temp_goal_replay_storage.append(np.copy(transition))
 
-        """
-        # Designer can create some additional goal replay transitions.  For instance, higher level transitions can be replayed with the subgoal achieved in hindsight as the original goal.
-        if self.layer_number > 0:
-            transition_b = [self.current_state, hindsight_action, 0, next_state, hindsight_goal, True, None]
-            # print("\nGoal Replay B: ", transition_b)
-            self.replay_buffer.add(np.copy(transition_b))
-        """
 
-
-    # Return reward given provided goal and goal achieved in hindsight
-    def get_reward(self,new_goal, hindsight_goal, goal_thresholds):
+    # reward function
+    def get_reward(self,new_goal, hindsight_goal, goal_thresholds=None, rtype='sparse'):
         assert len(new_goal) == len(hindsight_goal), "Goal, hindsight goal, and goal thresholds do not have same dimensions"
+        if rtype == 'sparse':
+            for i in range(len(new_goal)):
+                if np.absolute(new_goal[i]-hindsight_goal[i]) > goal_thresholds:
+                    return -1
+            # Else goal is achieved
+            return 0
+        elif rtype == 'dense':
+            return - np.square(new_goal - hindsight_goal).sum()
+        else:
+            raise NotImplementedError
 
-        # If the difference in any dimension is greater than threshold, goal not achieved
-        for i in range(len(new_goal)):
-            if np.absolute(new_goal[i]-hindsight_goal[i]) > goal_thresholds:
-                return -1
-
-        # Else goal is achieved
-        return 0
-
-
-    # Finalize goal replay by filling in goal, reward, and finished boolean for the preliminary goal replay transitions created before
+    # finally add data to buffer for HER
     def finalize_goal_replay(self, goal_thresholds):
-
-        # Choose transitions to serve as goals during goal replay.  The last transition will always be used
         num_trans = len(self.temp_goal_replay_storage)
-
-        num_replay_goals = self.num_replay_goals                        # 这里默认为3
-        # If fewer transitions that ordinary number of replay goals, lower number of replay goals
+        num_replay_goals = self.num_replay_goals                       
         if num_trans < self.num_replay_goals:
             num_replay_goals = num_trans
 
-        """
-        if self.layer_number == 1:
-            print("\n\nPerforming Goal Replay\n\n")
-            print("Num Trans: ", num_trans, ", Num Replay Goals: ", num_replay_goals)
-        """
-
         indices = np.zeros((num_replay_goals))
-        indices[:num_replay_goals-1] = np.random.randint(num_trans,size=num_replay_goals-1)     # future模式，从episode中随机选取hindsight goals，但是可能有重复
+        indices[:num_replay_goals-1] = np.random.randint(num_trans,size=num_replay_goals-1)     # future mode
         indices[num_replay_goals-1] = num_trans - 1
         indices = np.sort(indices)
 
-        # For each selected transition, update the goal dimension of the selected transition and all prior transitions by using the next state of the selected transition as the new goal.  Given new goal, update the reward and finished boolean as well.
         for i in range(len(indices)):
             trans_copy = np.copy(self.temp_goal_replay_storage)
             new_goal = trans_copy[int(indices[i])][6]
-            # for index in range(int(indices[i])+1):
             for index in range(num_trans):
-                # Update goal to new goal
+                # Update goal 
                 trans_copy[index][4] = new_goal
-
                 # Update reward
-                trans_copy[index][2] = self.get_reward(new_goal, trans_copy[index][6], goal_thresholds)
-
-                # Update finished boolean based on reward
+                trans_copy[index][2] = self.get_reward(new_goal, trans_copy[index][6], goal_thresholds, self.FLAGS.rtype)
+                # Update finished boolean 
                 if trans_copy[index][2] == 0:
                     trans_copy[index][5] = True
                 else:
                     trans_copy[index][5] = False
-
                 self.replay_buffer.add(trans_copy[index])
-
-        # Clear storage for preliminary goal replay transitions at end of goal replay
+        # reset temp goal buffer
         self.temp_goal_replay_storage = []
 
-
-    # Create transition penalizing subgoal if necessary.  The target Q-value when this transition is used will ignore next state as the finished boolena = True.  Change the finished boolean to False, if you would like the subgoal penalty to depend on the next state.
-    def penalize_subgoal(self, subgoal, next_state, high_level_goal_achieved):    # penalize subgoal直接加到buffer中
+    # penalize subgoal
+    def penalize_subgoal(self, subgoal, next_state, high_level_goal_achieved):    
         transition = [self.current_state, subgoal, self.subgoal_penalty, next_state, self.goal, True, None]
         self.replay_buffer.add(np.copy(transition))
 
-
-
-    # Determine whether layer is finished training， 判断是否训练完毕
+    # Determine whether training of the layer is finished 
     def return_to_higher_level(self, max_lay_achieved, agent, env, attempts_made):
-
-        # Return to higher level if (i) a higher level goal has been reached, (ii) maxed out episode time steps (env.max_actions), (iii) not testing and layer is out of attempts, and (iv) testing, layer is not the highest level, and layer is out of attempts.  NOTE: during testing, highest level will continue to ouput subgoals until either (i) the maximum number of episdoe time steps or (ii) the end goal has been achieved.
-        # Return to previous level when any higher level goal achieved.  NOTE: if not testing and agent achieves end goal, training will continue until out of time (i.e., out of time steps or highest level runs out of attempts).  This will allow agent to experience being around the end goal.
         if max_lay_achieved is not None and max_lay_achieved >= self.layer_number:
             return True
 
@@ -261,19 +206,13 @@ class Layer():
         # NOTE: During testing, agent will have env.max_action attempts to achieve goal
         elif agent.FLAGS.test and self.layer_number < agent.FLAGS.layers-1 and attempts_made >= self.time_limit:
             return True
-
         else:
             return False
 
-    def train(self, agent, env, subgoal_test=False, episode_num=None):
-
+    def train(self, agent, env, test=False, subgoal_test=False, episode_num=None):
         self.goal = agent.goal_array[self.layer_number]
         self.current_state = agent.current_state
-
-        # Reset flag indicating whether layer has ran out of attempts.  This will be used for subgoal testing.
         self.maxed_out = False
-
-        # Current layer has self.time_limit attempts to each its goal state.
         attempts_made = 0
 
         while True:
@@ -281,45 +220,21 @@ class Layer():
                 self.normalize_state = self.replay_buffer.state_norm.normalize(self.current_state)
                 self.normalize_goal = self.replay_buffer.goal_norm.normalize(self.goal)
 
-            # 正常Select action
-            action, action_type, next_subgoal_test = self.choose_action(agent, env, subgoal_test)
+            #Select action
+            action, action_type, next_subgoal_test = self.choose_action(agent, env,test, subgoal_test)
+            if self.layer_number > 0:             
+                agent.goal_array[self.layer_number - 1] = action        
+                goal_status, max_lay_achieved = agent.layers[self.layer_number - 1].train(agent, env, test=test, subgoal_test=next_subgoal_test, episode_num=episode_num)
 
-            # # random action， 因为用test模式时是直接从网络输出，这样的正确率不是随机动作的accuracy
-            # action = self.get_random_action(env)
-            # next_subgoal_test = False
-
-            """
-            if self.layer_number == agent.FLAGS.layers - 1:
-                # print("\nLayer %d Action: " % self.layer_number, action)
-                print("Q-Value: ", self.critic.get_Q_value(np.reshape(self.current_state,(1,len(self.current_state))), np.reshape(self.goal,(1,len(self.goal))), np.reshape(action,(1,len(action)))))
-            """
-
-            if self.layer_number > 0:             # 非最底层
-
-                agent.goal_array[self.layer_number - 1] = action        # 将动作传递给下一层作为目标，训练下一层
-
-                goal_status, max_lay_achieved = agent.layers[self.layer_number - 1].train(agent, env, next_subgoal_test, episode_num)
-
-            # If layer is bottom level, execute low-level action
+            # If layer is bottom level, execute action
             else:
-                next_state = env.execute_action(action)        # 最底层执行动作
-
-                # Increment steps taken                        # step taken是最底层执行的次数
+                next_state = env.execute_action(action)        
                 agent.steps_taken += 1
-                # print("Num Actions Taken: ", agent.steps_taken)
-
-                if agent.steps_taken >= env.max_actions:
-                    print("Out of actions (Steps: %d)" % agent.steps_taken)
-
                 agent.current_state = next_state
-
-                # Determine whether any of the goals from any layer was achieved and, if applicable, the highest layer whose goal was achieved
                 goal_status, max_lay_achieved = agent.check_goals(env)
+            attempts_made += 1                                      
 
-            attempts_made += 1                                      # attemp是所有层执行次数总和
-
-            # Perform hindsight learning using action actually executed (low-level action or hindsight subgoal)
-            if self.layer_number == 0:                        # 底层或者上层达到目标用当前动作作为Hindsight action，否则用当前状态的映射作为Hindsight action
+            if self.layer_number == 0:                       
                 hindsight_action = action
             else:
                 # If subgoal action was achieved by layer below, use this as hindsight action
@@ -328,17 +243,16 @@ class Layer():
                 else:
                     hindsight_action = env.project_state_to_subgoal(agent.current_state)
 
-            # Next, create hindsight transitions if not testing， 测试阶段不用存transition
-            if not agent.FLAGS.test:
-                # Create action replay transition by evaluating hindsight action given current goal
-                self.perform_action_replay(hindsight_action, agent.current_state, goal_status)
-                if agent.FLAGS.her:    # 使用her才需要另存transition
-                    self.create_prelim_goal_replay_trans(hindsight_action, agent.current_state, env, agent.FLAGS.layers)      # 不用HER去掉
-
-                # Penalize subgoals if subgoal testing and subgoal was missed by lower layers after maximum number of attempts
+            # for imitation learning we need to save data when both testing and training
+            self.perform_action_replay(hindsight_action, agent.current_state, goal_status, env, rtype=self.FLAGS.rtype)
+            
+            # no need to make her data
+            if not agent.FLAGS.test and not test:
+                if agent.FLAGS.her:    
+                    self.create_prelim_goal_replay_trans(hindsight_action, agent.current_state, env, agent.FLAGS.layers)      
+                # Penalize subgoals 
                 if self.layer_number > 0 and next_subgoal_test and agent.layers[self.layer_number-1].maxed_out:
                     self.penalize_subgoal(action, agent.current_state, goal_status[self.layer_number])
-
 
             if agent.FLAGS.verbose:
                 print("\nEpisode %d, Training Layer %d, Attempt %d" % (episode_num, self.layer_number,attempts_made))
@@ -356,29 +270,17 @@ class Layer():
 
             # Update state of current layer
             self.current_state = agent.current_state
-
-            if self.FLAGS.rnd:     # 对当前rnd进行训练
-                self.rnd_worker.train(self.current_state.reshape(1, env.state_dim))
-
             # Return to previous level to receive next subgoal if applicable
             if (max_lay_achieved is not None and max_lay_achieved >= self.layer_number) or agent.steps_taken >= env.max_actions or attempts_made >= self.time_limit:
-
-                if self.layer_number == agent.FLAGS.layers-1:
-                    print("HL Attempts Made: ", attempts_made)
-                    print("HER, test:{}, her:{}".format(agent.FLAGS.test, agent.FLAGS.her))
-
-                # # If goal was not achieved after max number of attempts, set maxed out flag to true， 需要设置中间层的最大步数，意味着中间层完成上层目标能走的最大步数
                 if attempts_made >= self.time_limit and not goal_status[self.layer_number]:
                     self.maxed_out = True
-                    # print("Layer %d Out of Attempts" % self.layer_number)
 
-                # 不测试和使用HER的时候需要进行数据修改
-                if not agent.FLAGS.test and agent.FLAGS.her:
+                # revise data for HER
+                if not test and agent.FLAGS.her:
                     if self.layer_number == agent.FLAGS.layers - 1:
                         goal_thresholds = env.end_goal_thresholds
                     else:
                         goal_thresholds = env.subgoal_thresholds
-
                     self.finalize_goal_replay(goal_thresholds)
 
                 # Under certain circumstances, the highest layer will not seek a new end goal
@@ -386,40 +288,34 @@ class Layer():
                     return goal_status, max_lay_achieved
 
 
-    # Update actor and critic networks
-    def learn(self, num_updates):
+    # Update neural networks
+    def learn(self, num_updates, episode_num):
         for _ in range(num_updates):
             if self.replay_buffer.size >= self.batch_size:
                 old_states, actions, rewards, new_states, goals, is_terminals = self.replay_buffer.get_batch()
-
-                if self.FLAGS.rnd:
-                    # self.normalize_inreward.reset()
-                    intrinsic_reward = self.rnd_worker.get_intrinsic_reward(new_states).reshape(len(new_states), 1)
-                    # self.normalize_inreward.update(np.vstack(intrinsic_reward))
-                    # normed_intrinsic_reward = self.normalize_inreward.normalize(intrinsic_reward)   # 不用normalize reward效果可能会好一些
-                    thre = max(np.abs(intrinsic_reward))
-                    for i in range(len(rewards)):
-                        rewards[i] += 0.5 * intrinsic_reward[i] / thre
-
+                # forward dynamic
+                if self.FLAGS.curiosity:
+                    intrinsic_reward = self.cur_model.get_intrinsic_reward(old_states, actions, new_states)
+                    self.normalize_inreward.update(np.vstack(intrinsic_reward))
+                    normed_intrinsic_reward = self.normalize_inreward.normalize(intrinsic_reward)   
+                    self.cur_model.train(old_states, actions, new_states)
+                    rewards = normed_intrinsic_reward
 
                 self.critic.update(old_states, actions, rewards, new_states, goals, self.actor.get_action(new_states,goals), is_terminals)
                 action_derivs = self.critic.get_gradients(old_states, goals, self.actor.get_action(old_states, goals))
                 self.actor.update(old_states, goals, action_derivs)
 
+            # Behavior Clone
+            if self.FLAGS.imitation:
+                self.actor.imit_ratio = self.actor.imit_init_ratio * (1 - episode_num / self.FLAGS.episodes)
+                imit_states, imit_actions, _, _, imit_goals, _ = self.imitation_buffer.get_batch()
+                imit_loss, _ = self.actor.imit_update(imit_states, imit_goals, imit_actions)
 
-        """
-        # To use target networks comment for loop above and uncomment for loop below
-        for _ in range(num_updates):
-            # Update weights of non-target networks
-            if self.replay_buffer.size >= self.batch_size:
-                old_states, actions, rewards, new_states, goals, is_terminals = self.replay_buffer.get_batch()
+        if self.FLAGS.imitation:
+            print('imitation loss :{}'.format(imit_loss))
 
 
-                self.critic.update(old_states, actions, rewards, new_states, goals, self.actor.get_target_action(new_states,goals), is_terminals)
-                action_derivs = self.critic.get_gradients(old_states, goals, self.actor.get_action(old_states, goals))
-                self.actor.update(old_states, goals, action_derivs)
 
-        # Update weights of target networks
-        self.sess.run(self.critic.update_target_weights)
-        self.sess.run(self.actor.update_target_weights)
-        """
+                
+        
+  

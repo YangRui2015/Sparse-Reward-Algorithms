@@ -11,6 +11,10 @@ class ExperienceBuffer():
         self.if_normalize = if_normalize
         self.state_norm = None
         self.goal_norm = None
+    
+    def _init_experience(self, experiences):
+        self.experiences = experiences
+        self.size = len(experiences)
 
     def add(self, experience):
         assert len(experience) == 7, 'Experience must be of form (s, a, r, s, g, t, grip_info\')'
@@ -28,7 +32,7 @@ class ExperienceBuffer():
         self.size += 1
 
         if self.size >= self.max_buffer_size:
-            beg_index = int(np.floor(self.max_buffer_size/10))                     # 删除了1/6的buffer
+            beg_index = int(np.floor(self.max_buffer_size/10))                    
             self.experiences = self.experiences[beg_index:]
             self.size -= beg_index
 
