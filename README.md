@@ -50,7 +50,7 @@ if using HDDPG, you should use :
 
 ## Result
 
-<img src=https://github.com/YangRui2015/Sparse-Reward-Algorithms/blob/master/data/result.jpg width = "300" align=center />
+<img src=https://github.com/YangRui2015/Sparse-Reward-Algorithms/blob/master/data/result.jpg width = "300">
 
 
 
