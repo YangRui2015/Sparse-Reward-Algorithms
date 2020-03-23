@@ -62,11 +62,6 @@ def parse_options():
         help='Include to reset policy'
     )
 
-    parser.add_argument(
-        '--normalize',
-        action='store_true',
-        help='normalize observation and goal'
-    )
 
     parser.add_argument(
         '--test',
