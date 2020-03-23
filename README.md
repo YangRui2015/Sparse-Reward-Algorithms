@@ -50,9 +50,7 @@ if using HDDPG, you should use :
 
 ## Result
 
-[! image](
-https://github.com/YangRui2015/Sparse-Reward-Algorithms/blob/master/data/compare_DDPG_Reward_Shaping.jpg
-)
+![Result](https://github.com/YangRui2015/Sparse-Reward-Algorithms/blob/master/data/compare_DDPG_Reward_Shaping.jpg)
 
 
 
