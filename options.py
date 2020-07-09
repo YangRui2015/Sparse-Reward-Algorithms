@@ -109,6 +109,7 @@ def parse_options():
     )
 
     FLAGS, unparsed = parser.parse_known_args()
+    FLAGS.normalize = False
 
     if FLAGS.threadings > 1:  # otherwise there will be a bug
         FLAGS.show = False
@@ -116,8 +117,8 @@ def parse_options():
     if FLAGS.test:
         FLAGS.retrain = False
 
-    print("You can check your parameters here. Press 'c' to continue.")
+    # print("You can check your parameters here. Press 'c' to continue.")
     print(FLAGS)
 
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     return FLAGS
