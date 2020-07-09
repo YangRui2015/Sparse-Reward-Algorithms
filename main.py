@@ -1,11 +1,3 @@
-# -*- coding: utf-8 -*-
-# main.py
-# author: yangrui
-# description: 
-# created: 2019-05-10T19:01:15.155Z+08:00
-# last-modified: 2020-03-13T10:00:30.182Z+08:00
-# email: yangrui19@mails.tsinghua.edu.cn
-
 from global_utils import print_summary
 from options import parse_options
 from global_utils import set_global_seed, save_performance, plot_data
